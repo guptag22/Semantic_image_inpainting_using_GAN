@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from IPython.display import HTML
 
+from dcgan_model import Generator,Discriminator,weights_init
+
 manualseed = 123
 random.seed(manualseed)
 torch.manual_seed(manualseed)
@@ -19,40 +21,40 @@ torch.manual_seed(manualseed)
 checkpoint_filename = "checkpoint/saved_model.pth"
 
 dataroot = "/Users/gammu/Documents/study/Advanced machine learning/Project/celeba"
-batch_size = 128
-image_size = 64
-nc = 3
-nz = 100
-ngf = 64
-ndf = 64
-num_epochs = 5
-lr = 0.0002
-beta1 = 0.5
-ngpu = 1
-
+params = {
+    "bsize" : 128,# Batch size during training.
+    'imsize' : 64,# Spatial size of training images. All images will be resized to this size during preprocessing.
+    'nc' : 3,# Number of channles in the training images. For coloured images this is 3.
+    'nz' : 100,# Size of the Z latent vector (the input to the generator).
+    'ngf' : 64,# Size of feature maps in the generator. The depth will be multiples of this.
+    'ndf' : 64, # Size of features maps in the discriminator. The depth will be multiples of this.
+    'nepochs' : 10,# Number of training epochs.
+    'lr' : 0.0002,# Learning rate for optimizers
+    'beta1' : 0.5,# Beta1 hyperparam for Adam optimizer
+    'save_epoch' : 2 }
 start_epoch = 0
 
 device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
 
 dataset = dset.ImageFolder(root=dataroot,
                             transform=transforms.Compose([
-                                transforms.Resize(image_size),
-                                transforms.CenterCrop(image_size),
+                                transforms.Resize(params['imsize']),
+                                transforms.CenterCrop(params['imsize']),
                                 transforms.ToTensor(),
                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                             ]))
 
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['bsize'], shuffle=True)
 
 real_batch = next(iter(dataloader))
-plt.figure(figsize=(8,8))
-plt.axis("off")
-plt.title("Training Images")
-plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
-plt.show()
+# plt.figure(figsize=(8,8))
+# plt.axis("off")
+# plt.title("Training Images")
+# plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
+# plt.show()
 
 # Load pre-trained model for continued training
-def load_checkpoint(G_model, D_model, G_optimizer, D_optimizer, filename):
+def load_checkpoint(G_model, D_model, G_optimizer, D_optimizer, params, filename):
     # Note: Input model & optimizer should be pre-defined.  This routine only updates their states.
     start_epoch = 0
     if os.path.isfile(filename):
@@ -63,96 +65,31 @@ def load_checkpoint(G_model, D_model, G_optimizer, D_optimizer, filename):
         G_optimizer.load_state_dict(checkpoint['G_optimizer'])
         D_model.load_state_dict(checkpoint['D_state_dict'])
         D_optimizer.load_state_dict(checkpoint['D_optimizer'])
+        params = checkpoint['params']
         print("=> loaded checkpoint '{}' (epoch {})"
                   .format(filename, checkpoint['epoch']))
     else:
         print("=> no checkpoint found at '{}'".format(filename))
 
-    return G_model, D_model, G_optimizer, D_optimizer, start_epoch
-
-def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        nn.init.normal_(m.weight.data, 0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        nn.init.normal_(m.weight.data, 1.0, 0.02)
-        nn.init.constant_(m.bias.data, 0)
-
-class Generator(nn.Module):
-    def __init__(self, ngpu):
-        super(Generator, self).__init__()
-        self.ngpu = ngpu
-        self.main = nn.Sequential(
-            # input is Z, going into a convolution
-            nn.ConvTranspose2d( nz, ngf * 8, 4, 1, 0, bias=False),
-            nn.BatchNorm2d(ngf * 8),
-            nn.ReLU(True),
-            # state size. (ngf*8) x 4 x 4
-            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf * 4),
-            nn.ReLU(True),
-            # state size. (ngf*4) x 8 x 8
-            nn.ConvTranspose2d( ngf * 4, ngf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf * 2),
-            nn.ReLU(True),
-            # state size. (ngf*2) x 16 x 16
-            nn.ConvTranspose2d( ngf * 2, ngf, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ngf),
-            nn.ReLU(True),
-            # state size. (ngf) x 32 x 32
-            nn.ConvTranspose2d( ngf, nc, 4, 2, 1, bias=False),
-            nn.Tanh()
-            # state size. (nc) x 64 x 64
-        )
-
-    def forward(self, input):
-        return self.main(input)
-
-class Discriminator(nn.Module):
-    def __init__(self, ngpu):
-        super(Discriminator, self).__init__()
-        self.ngpu = ngpu
-        self.main = nn.Sequential(
-            # input is (nc) x 64 x 64
-            nn.Conv2d(nc, ndf, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf) x 32 x 32
-            nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 2),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*2) x 16 x 16
-            nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 4),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*4) x 8 x 8
-            nn.Conv2d(ndf * 4, ndf * 8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(ndf * 8),
-            nn.LeakyReLU(0.2, inplace=True),
-            # state size. (ndf*8) x 4 x 4
-            nn.Conv2d(ndf * 8, 1, 4, 1, 0, bias=False),
-            nn.Sigmoid()
-        )
-
-    def forward(self, input):
-        return self.main(input)
+    return G_model, D_model, G_optimizer, D_optimizer, start_epoch, params
 
 
 # Create the generator
-netG = Generator(ngpu).to(device)
+netG = Generator(params).to(device)
 # Apply the weights_init function to randomly initialize all weights to mean=0, stdev=0.2.
 netG.apply(weights_init)
 # Print the model
 print(netG)
 
 # Create the Discriminator
-netD = Discriminator(ngpu).to(device)
+netD = Discriminator(params).to(device)
 # Apply the weights_init function to randomly initialize all weights to mean=0, stdev=0.2.
 netD.apply(weights_init)
 # Print the model
 print(netD)
 
 # Create batch of latent vectors that we will use to visualize the progression of the generator
-fixed_noise = torch.randn(64, nz, 1, 1, device=device)
+fixed_noise = torch.randn(64, params['nz'], 1, 1, device=device)
 
 # Establish convention for real and fake labels during training
 real_label = 1
@@ -160,11 +97,11 @@ fake_label = 0
 # Initialize BCELoss function
 criterion = nn.BCELoss()
 # Setup Adam optimizers for both G and D
-optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
-optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
+optimizerD = optim.Adam(netD.parameters(), lr=params['lr'], betas=(params['beta1'], 0.999))
+optimizerG = optim.Adam(netG.parameters(), lr=params['lr'], betas=(params['beta1'], 0.999))
 
 # Load model if available
-netG, netD, optimizerG, optimizerD, start_epoch = load_checkpoint(netG,netD,optimizerG,optimizerD,checkpoint_filename)
+netG, netD, optimizerG, optimizerD, start_epoch, params = load_checkpoint(netG,netD,optimizerG,optimizerD,params,checkpoint_filename)
 netG = netG.to(device)
 netD = netD.to(device)
 for state in optimizerG.state.values():
@@ -187,7 +124,7 @@ iters = 0
 print("Starting Training Loop...")
 epoch = start_epoch
 # For each epoch
-while epoch < num_epochs:
+while epoch < params['nepochs']:
     # For each batch in the dataloader
     
     for i, data in enumerate(dataloader, 0):
@@ -211,7 +148,7 @@ while epoch < num_epochs:
 
         ## Train with all-fake batch
         # Generate batch of latent vectors
-        noise = torch.randn(b_size, nz, 1, 1, device=device)
+        noise = torch.randn(b_size, params['nz'], 1, 1, device=device)
         # Generate fake image batch with G
         fake = netG(noise)
         label.fill_(fake_label)
@@ -245,23 +182,24 @@ while epoch < num_epochs:
         # Output training stats
         if i % 50 == 0:
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                  % (epoch, num_epochs, i, len(dataloader),
+                  % (epoch, params['nepochs'], i, len(dataloader),
                      errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
         # Save Losses for plotting later
         G_losses.append(errG.item())
         D_losses.append(errD.item())
 
-        # Save the model at end of an epoch
-        if i == len(dataloader)-1 :
+        # Save the model at end of every 2 epochs
+        if epoch%2 == 0 and i == len(dataloader)-1 :
             state = {'epoch': epoch + 1, 'G_state_dict': netG.state_dict(),
                     'D_state_dict': netD.state_dict(),
                     'G_optimizer': optimizerG.state_dict(),
-                    'D_optimizer': optimizerD.state_dict() }
+                    'D_optimizer': optimizerD.state_dict(), 
+                    'params': params }
             torch.save(state, checkpoint_filename)
 
         # Check how the generator is doing by saving G's output on fixed_noise
-        if (iters % 500 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
+        if (iters % 500 == 0) or ((epoch == params['nepochs']-1) and (i == len(dataloader)-1)):
             with torch.no_grad():
                 fake = netG(fixed_noise).detach().cpu()
             img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
