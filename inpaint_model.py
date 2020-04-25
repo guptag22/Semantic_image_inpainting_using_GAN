@@ -46,7 +46,7 @@ class Inpaint:
         self.z_dim = params['nz'] # 100
         self.nIters = 3000 # Iterations 
         self.lamda = 0.2
-        self.z = torch.randn(self.batch_size, self.z_dim, 1, 1, device=device)
+        self.z = torch.randn(self.batch_size, self.z_dim, 1, 1, device=device, requires_grad=True)
         self.opt = torch.optim.Adam(self.z, lr = 0.0003)
 
     def get_mask(self,images):
@@ -84,6 +84,7 @@ class Inpaint:
     def generate_z_hat(self, images, mask):
         # Backpropagation for z
         for i in range(self.nIters):
+            self.opt.zero_grad()
             self.G_z_i, self.errG = self.run_dcgan(self.z)
             self.perceptual_loss = self.errG
             self.context_loss = self.get_context_loss(self.G_z_i, images, mask)
