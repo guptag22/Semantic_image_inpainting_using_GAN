@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from scipy.signal import convolve2d
 from dcgan_model import Generator,Discriminator,weights_init
 
 device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
@@ -50,7 +51,7 @@ class Inpaint:
         self.opt = torch.optim.Adam(self.z, lr = 0.0003)
 
     def get_mask(self,images):
-        # Create mask according to the input image
+        # TODO: Create mask according to the input image
 
         return 0
 
@@ -59,10 +60,12 @@ class Inpaint:
 
         return 0
 
-    def get_imp_weighting(self, mask):
-        # Implement eq 3
-
-        return 0
+    def get_imp_weighting(self, mask, nsize):
+        # TODO: Implement eq 3
+        kernel = np.ones((nsize,nsize), dtype=np.float32)
+        kernel = kernel/np.sum(kernel)
+        weighted_mask = mask * convolve2d(mask, kernel, mode='same', boundary='symm')
+        return weighted_mask
 
     def run_dcgan(self,z_i):
         G_z_i = self.netG(z_i)
@@ -75,8 +78,9 @@ class Inpaint:
     def get_context_loss(self, G_z_i, images, mask):
         # Calculate context loss
         # Implement eq 4
-        W = self.get_imp_weighting(mask)
-        # TODO: verify norm output. Its probably a vector. we need a single value
+        nsize = 7
+        W = self.get_imp_weighting(mask, nsize)
+        # TODO: verify norm output. Its probably a vector. We need a single value
         context_loss = torch.norm(torch.mul(W, G_z_i - images), p=1) 
 
         return context_loss
@@ -96,4 +100,7 @@ class Inpaint:
             
             # TODO: Not sure if this next would work to update z. Check
             self.opt.step() 
+
+            # TODO: Clip Z to be between -1 and 1
+
 
