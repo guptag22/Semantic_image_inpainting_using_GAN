@@ -1,18 +1,16 @@
 import torch
 import torchvision
+import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
 
 from torch.utils.data import Dataset
-# from torchvision
-from PIL import Image
-from skimage import transform
-import skimage.io as io
+from PIL import Image, ImageDraw
 from pathlib import PurePath
 
 class CelebADataset(Dataset):
 
-    def __init__(self, root, image_size, split):
+    def __init__(self, root, image_size, split, transform):
         self.root = root
         self.image_size = image_size
         self.split = split
@@ -22,6 +20,7 @@ class CelebADataset(Dataset):
             "test": "2"
         }
         self.file_list = self.read_file_list()
+        self.transform = transform
 
     
     def __len__(self):
@@ -29,22 +28,28 @@ class CelebADataset(Dataset):
 
     
     def __getitem__(self, idx):
-        original_image = np.float64(io.imread(self.file_list[idx]))
-        original_image = transform.resize(original_image, self.image_size)
-        original_image = original_image.reshape((3,)+self.image_size)
-        original_image = (original_image-np.mean(original_image))/np.max(np.abs(original_image))
+        filename = self.file_list[idx]
+        with open(filename, 'rb') as f:
+            og_image = Image.open(f)
+            og_image = og_image.convert('RGB')
+            og_image = og_image.resize(self.image_size)
+            # TODO: normalize
 
-        # Patch
-        mask = np.ones(self.image_size,dtype=np.float32)
-        x = np.random.randint(self.image_size[0]//6,5*self.image_size[0]//6)
-        y = np.random.randint(self.image_size[1]//6,5*self.image_size[1]//6)
-        h = np.random.randint(self.image_size[0]//4,self.image_size[0]//2)
-        w = np.random.randint(self.image_size[1]//4,self.image_size[1]//2)
-        mask[max(0,x-h//2):min(self.image_size[0],x+h//2),max(0,y-w//2):min(self.image_size[1],y+w//2)] = 0
-        target_image = original_image.copy()
-        target_image[0][1-mask > 0.5] = np.max(target_image)
+            mask = Image.new("L", og_image.size, 255)
+            draw = ImageDraw.Draw(mask)
+            draw.rectangle((22, 22, 44, 44), fill=0)
+            # mask.save('mask_rec.jpg', quality=95)
 
-        return torch.FloatTensor(target_image), torch.FloatTensor(original_image), torch.FloatTensor(mask)
+            target_image = Image.new("RGB", og_image.size)
+            target_image.paste(og_image, (0, 0), mask)
+            # target_image.save('target_image.jpg', quality=95)
+
+            if self.transform:
+                og_image = self.transform(og_image)
+                target_image = self.transform(target_image)
+            mask = torch.FloatTensor(np.array(mask))
+
+            return og_image, target_image, mask
     
 
     def read_file_list(self):
@@ -64,18 +69,12 @@ class CelebADataset(Dataset):
         return file_list
 
     
-
-
 if __name__ == "__main__":
-    dset = CelebADataset("/home/ssing57/dataset", (64, 64), "train")
-    # print(dset.read_file_list())
-
-    # train_celeba_data = torchvision.datasets.ImageFolder(root='/home/ssing57/dataset', transform=torchvision.transforms.Compose([
-    #     torchvision.transforms.Resize(IMAGE_SIZE),
-    #     torchvision.transforms.CenterCrop(IMAGE_SIZE),
-    #     torchvision.transforms.ToTensor(),
-    #     torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    # ]))
+    transform=torchvision.transforms.Compose([
+        torchvision.transforms.ToTensor(),
+        torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+    ])
+    dset = CelebADataset("/home/ssing57/dataset", (64, 64), "train", transform)
     train_dataloader = torch.utils.data.DataLoader(dset, batch_size=4, shuffle=True)
 
     # # Decide which device we want to run on
@@ -87,8 +86,8 @@ if __name__ == "__main__":
     plt.figure(figsize=(8,8))
     plt.axis("off")
     plt.title("Training Images")
-    print(torchvision.utils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu().shape)
-    a = np.transpose(torchvision.utils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)).numpy()
+    print(torchvision.utils.make_grid(real_batch[1].to(device)[:64], padding=2, normalize=True).cpu().shape)
+    a = np.transpose(torchvision.utils.make_grid(real_batch[1].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)).numpy()
     # print(a)
     im = Image.fromarray((a * 255).astype(np.uint8))
     im.save("file.jpeg")
