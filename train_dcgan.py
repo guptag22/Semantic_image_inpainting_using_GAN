@@ -205,6 +205,7 @@ while epoch < params['nepochs']:
             img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
         iters += 1
+    epoch += 1
 
 
 
