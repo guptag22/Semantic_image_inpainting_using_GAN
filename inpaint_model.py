@@ -81,7 +81,7 @@ class Inpaint:
         nsize = 7
         W = self.get_imp_weighting(mask, nsize)
         # TODO: verify norm output. Its probably a vector. We need a single value
-        context_loss = torch.norm(torch.mul(W, G_z_i - images), p=1) 
+        context_loss = torch.sum(torch.abs(torch.mul(W, G_z_i - images))) 
 
         return context_loss
 
@@ -92,8 +92,9 @@ class Inpaint:
             self.G_z_i, self.errG = self.run_dcgan(self.z)
             self.perceptual_loss = self.errG
             self.context_loss = self.get_context_loss(self.G_z_i, images, mask)
-            self.loss = self.context_loss + (self.lamda * self.perceptual_loss)
-            grad = torch.autograd.grad(self.loss, self.z)
+            loss = self.context_loss + (self.lamda * self.perceptual_loss)
+            loss.backward()
+            # grad = torch.autograd.grad(loss, self.z)
 
             # Update z
             # https://github.com/moodoki/semantic_image_inpainting/blob/extensions/src/model.py#L182
