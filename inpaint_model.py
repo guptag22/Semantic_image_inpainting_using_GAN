@@ -50,8 +50,10 @@ class Inpaint:
         self.image_size = params['imsize'] # 64
         self.num_channels = params['nc'] # 3
         self.z_dim = params['nz'] # 100
-        self.nIters = 1000 # Iterations 
+        self.nIters = 3000 # Iterations 
         self.lamda = 0.2
+        self.momentum = 0.9
+        self.lr = 0.0003
 
     def preprocess(self,images,masks):
         # preprocess the images and masks
@@ -100,8 +102,10 @@ class Inpaint:
         # Backpropagation for z
         z = torch.randn(images.shape[0], self.z_dim, 1, 1, device=device, requires_grad=True)
         opt = torch.optim.Adam([z], lr = 0.0003)
+        v = 0
         for i in range(self.nIters):
             opt.zero_grad()
+            z.requires_grad = True
             G_z_i, errG = self.run_dcgan(z)
             # with torch.no_grad():
             #     plt.figure(figsize=(8,8))
@@ -114,14 +118,20 @@ class Inpaint:
             perceptual_loss = errG
             context_loss = self.get_context_loss(G_z_i, images, masks)
             loss = context_loss + (self.lamda * perceptual_loss)
-            loss.backward()
-            # grad = torch.autograd.grad(loss, self.z)
+            # loss.backward()
+            grad = torch.autograd.grad(loss, z)
 
             # Update z
             # https://github.com/moodoki/semantic_image_inpainting/blob/extensions/src/model.py#L182
+            v_prev = v
+            v = self.momentum*v - self.lr*grad[0]
+            with torch.no_grad():
+                z += (-self.momentum * v_prev +
+                        (1 + self.momentum) * v)
+                z = torch.clamp(z, -1, 1)
             
             # TODO: Not sure if this next would work to update z. Check
-            opt.step() 
+            # opt.step() 
 
             # TODO: Clip Z to be between -1 and 1
 
@@ -132,7 +142,7 @@ class Inpaint:
                     plt.figure(figsize=(8,8))
                     plt.subplot(1,2,1)
                     plt.axis("off")
-                    plt.title("Real Images")
+                    plt.title("Corrupt Images")
                     plt.imshow(np.transpose(vutils.make_grid(images.to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 
                     plt.subplot(1,2,2)
@@ -140,6 +150,7 @@ class Inpaint:
                     plt.title("Generated Images")
                     plt.imshow(np.transpose(vutils.make_grid(G_z_i.to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
                     plt.show()
+                    plt.savefig("inpaint_{}.jpg".format(i), dpi=300)
 
         return z
 
@@ -159,14 +170,15 @@ class Inpaint:
                 plt.figure(figsize=(8,8))
                 plt.subplot(1,2,1)
                 plt.axis("off")
-                plt.title("Real Images")
-                plt.imshow(np.transpose(vutils.make_grid(real_images.to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
+                plt.title("Corrupt Images")
+                plt.imshow(np.transpose(vutils.make_grid(corrupt_images.to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 
                 plt.subplot(1,2,2)
                 plt.axis("off")
                 plt.title("Generated Images")
                 plt.imshow(np.transpose(vutils.make_grid(G_z_hat.to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
                 plt.show()
+                plt.savefig("inpaint_final.jpg", dpi=300)
 
 
 if __name__ == "__main__":
