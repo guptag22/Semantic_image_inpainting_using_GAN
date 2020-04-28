@@ -74,7 +74,7 @@ def get_celeba_data():
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     dset = CelebADataset("/home/ssing57/dataset", (64, 64), "train", transform)
-    train_dataloader = torch.utils.data.DataLoader(dset, batch_size=4, shuffle=True)
+    train_dataloader = torch.utils.data.DataLoader(dset, batch_size=64, shuffle=True)
     return train_dataloader
 
 if __name__ == "__main__":

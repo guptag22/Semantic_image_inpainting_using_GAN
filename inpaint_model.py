@@ -3,8 +3,9 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
-from scipy.signal import convolve2d
+# from scipy.signal import convolve2d
 from dcgan_model import Generator,Discriminator,weights_init
 import dataset
 
@@ -59,14 +60,21 @@ class Inpaint:
 
     def get_imp_weighting(self, masks, nsize):
         # TODO: Implement eq 3
-        kernel = np.ones((nsize,nsize), dtype=np.float32)
-        kernel = kernel/np.sum(kernel)
-        weighted_masks = torch.empty(masks.shape[0],3,masks.shape[1],masks.shape[2])
-        for i in range(len(masks)):
-            weighted_mask = masks[i] * convolve2d(masks[i], kernel, mode='same', boundary='symm')
-            # create 3 channels to match image channels
-            weighted_mask = torch.unsqueeze(weighted_mask,0)
-            weighted_masks[i] = torch.repeat_interleave(weighted_mask, 3, dim = 0)
+        kernel = torch.ones((1,1,nsize,nsize)).to(device)
+        kernel = kernel/torch.sum(kernel)
+        weighted_masks = torch.empty(masks.shape[0], 3, masks.shape[2], masks.shape[3]).to(device)
+        padded_masks = F.pad(masks, (2, 2, 2, 2), "constant", 1)
+        # print(kernel.shape, masks.shape)
+        conv = F.conv2d(input=padded_masks, weight=kernel, padding=1)
+        # print(conv.shape)
+        # print(masks.shape)
+        weighted_masks = masks * conv
+        # print(weighted_masks.shape)
+        # for i in range(len(masks)):
+        #     weighted_mask = masks[i] * convolve2d(masks[i], kernel, mode='same', boundary='symm')
+        #     # create 3 channels to match image channels
+        #     weighted_mask = torch.unsqueeze(weighted_mask,0)
+        #     weighted_masks[i] = torch.repeat_interleave(weighted_mask, 3, dim = 0)
 
         return weighted_masks
 
@@ -140,11 +148,12 @@ class Inpaint:
             print(i)
             if i>0:
                 break
-            real_images = data[0]
-            corrupt_images = data[1]
-            masks = data[2]/255
+            real_images = data[0].to(device)
+            corrupt_images = data[1].to(device)
+            masks = (data[2]/255).to(device)
+            masks.unsqueeze_(1)
             # Get optimal latent space vectors (Z^) for corrupt images
-            z_hat = self.generate_z_hat(real_images,corrupt_images,masks)
+            z_hat = self.generate_z_hat(real_images, corrupt_images, masks)
             with torch.no_grad():
                 G_z_hat, errG = self.run_dcgan(z_hat)
                 plt.figure(figsize=(8,8))
