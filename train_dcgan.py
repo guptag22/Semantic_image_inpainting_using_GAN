@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 import matplotlib.animation as animation
 from IPython.display import HTML
+import dataset
 
 from dcgan_model import Generator,Discriminator,weights_init
 
@@ -28,23 +29,23 @@ params = {
     'nz' : 100,# Size of the Z latent vector (the input to the generator).
     'ngf' : 64,# Size of feature maps in the generator. The depth will be multiples of this.
     'ndf' : 64, # Size of features maps in the discriminator. The depth will be multiples of this.
-    'nepochs' : 10,# Number of training epochs.
+    'nepochs' : 15,# Number of training epochs.
     'lr' : 0.0002,# Learning rate for optimizers
     'beta1' : 0.5,# Beta1 hyperparam for Adam optimizer
-    'save_epoch' : 2 }
+    'save_epoch' : 1 } # Save model after every epoch
 start_epoch = 0
 
 device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
 
-dataset = dset.ImageFolder(root=dataroot,
-                            transform=transforms.Compose([
-                                transforms.Resize(params['imsize']),
-                                transforms.CenterCrop(params['imsize']),
-                                transforms.ToTensor(),
-                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                            ]))
+# dataset = dset.ImageFolder(root=dataroot,
+#                             transform=transforms.Compose([
+#                                 transforms.Resize(params['imsize']),
+#                                 transforms.CenterCrop(params['imsize']),
+#                                 transforms.ToTensor(),
+#                                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+#                             ]))
 
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=params['bsize'], shuffle=True)
+dataloader = dataset.get_celeba_data(params['bsize'])
 
 real_batch = next(iter(dataloader))
 # plt.figure(figsize=(8,8))
@@ -60,12 +61,12 @@ def load_checkpoint(G_model, D_model, G_optimizer, D_optimizer, params, filename
     if os.path.isfile(filename):
         print("=> loading checkpoint '{}'".format(filename))
         checkpoint = torch.load(filename)
-        start_epoch = checkpoint['epoch']
+        start_epoch = checkpoint['epoch']       # From where to continue training
         G_model.load_state_dict(checkpoint['G_state_dict'])
         G_optimizer.load_state_dict(checkpoint['G_optimizer'])
         D_model.load_state_dict(checkpoint['D_state_dict'])
         D_optimizer.load_state_dict(checkpoint['D_optimizer'])
-        params = checkpoint['params']
+        # params = checkpoint['params']
         print("=> loaded checkpoint '{}' (epoch {})"
                   .format(filename, checkpoint['epoch']))
     else:
@@ -182,15 +183,15 @@ while epoch < params['nepochs']:
         # Output training stats
         if i % 50 == 0:
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                  % (epoch, params['nepochs'], i, len(dataloader),
+                  % (epoch+1, params['nepochs'], i, len(dataloader),
                      errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
         # Save Losses for plotting later
         G_losses.append(errG.item())
         D_losses.append(errD.item())
 
-        # Save the model at end of every 2 epochs
-        if epoch%2 == 0 and i == len(dataloader)-1 :
+        # Save the model at end of every epoch
+        if i == len(dataloader)-1 :
             state = {'epoch': epoch + 1, 'G_state_dict': netG.state_dict(),
                     'D_state_dict': netD.state_dict(),
                     'G_optimizer': optimizerG.state_dict(),
