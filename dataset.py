@@ -68,17 +68,17 @@ class CelebADataset(Dataset):
                 line = f.readline()
         return file_list
 
-def get_celeba_data():
+def get_celeba_data(bsize):
     transform=torchvision.transforms.Compose([
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     dset = CelebADataset("/home/ssing57/dataset", (64, 64), "train", transform)
-    train_dataloader = torch.utils.data.DataLoader(dset, batch_size=64, shuffle=True)
+    train_dataloader = torch.utils.data.DataLoader(dset, batch_size=bsize, shuffle=True)
     return train_dataloader
 
 if __name__ == "__main__":
-    train_dataloader = get_celeba_data()
+    train_dataloader = get_celeba_data(4)
     # # Decide which device we want to run on
     # # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     device = "cpu"
