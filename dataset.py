@@ -35,7 +35,8 @@ class CelebADataset(Dataset):
             og_image = og_image.convert('RGB')
             og_image = og_image.resize(self.image_size)
             
-            mask = get_rectangle_mask(og_image)
+            # mask = get_rectangle_mask(og_image, 22, 22, 42, 42)
+            mask = get_random_missing_pixels(og_image)
 
             target_image = Image.new("RGB", og_image.size)
             target_image.paste(og_image, (0, 0), mask)
@@ -85,7 +86,7 @@ class DTDataset(Dataset):
             og_image = og_image.convert('RGB')
             og_image = og_image.resize(self.image_size)
 
-            mask = get_rectangle_mask(og_image)
+            mask = get_rectangle_mask(og_image, 22, 22, 42, 42)
 
             target_image = Image.new("RGB", og_image.size)
             target_image.paste(og_image, (0, 0), mask)
@@ -125,7 +126,7 @@ class PetsDataset(Dataset):
             og_image = og_image.convert('RGB')
             og_image = og_image.resize(self.image_size)
 
-            mask = get_circle_mask(og_image)
+            mask = get_rectangle_mask(og_image, 22, 22, 42, 42)
 
             target_image = Image.new("RGB", og_image.size)
             target_image.paste(og_image, (0, 0), mask)
@@ -147,10 +148,10 @@ class PetsDataset(Dataset):
         return file_list
 
 
-def get_rectangle_mask(og_image):
+def get_rectangle_mask(og_image, x1, y1, x2, y2):
     mask = Image.new("L", og_image.size, 255)
     draw = ImageDraw.Draw(mask)
-    draw.rectangle((22, 22, 44, 44), fill=0)
+    draw.rectangle((x1, y1, x2, y2), fill=0)
     # mask.save('mask_rec.jpg', quality=95)
     return mask
 
@@ -158,7 +159,7 @@ def get_rectangle_mask(og_image):
 def get_random_missing_pixels(og_image):
     mask = Image.new("L", og_image.size, 255)
     draw = ImageDraw.Draw(mask)
-    for i in range(22):
+    for i in range(20):
         rand_x = randrange(64)
         rand_y = randrange(64)
         draw.rectangle((rand_x, rand_y, rand_x+2, rand_y+2), fill=0)

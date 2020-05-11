@@ -1,4 +1,5 @@
 import os
+import sys
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import numpy as np
 import torch
@@ -45,6 +46,9 @@ class Inpaint:
             saved_model = torch.load(filename, map_location=torch.device(device))
             self.netG.load_state_dict(saved_model['G_state_dict'])
             self.netD.load_state_dict(saved_model['D_state_dict'])
+        else:
+            print("Trained DCGAN not found!")
+            sys.exit()
             # params = saved_model['params']
         
         self.batch_size = 64 # Batch size for inpainting
@@ -206,7 +210,7 @@ class Inpaint:
                 for j in range(len(masks)):
                     channeled_masks[j] = torch.repeat_interleave(masks[j], 3, dim = 0)
                 merged_images = channeled_masks*corrupt_images + (1-channeled_masks)*G_z_hat
-            blended_images = np.empty_like(corrupt_images.cpu().numpy())
+            # blended_images = np.empty_like(corrupt_images.cpu().numpy())
             # for k in range(len(merged_images)):
                 # blended_images[k] = blend( corrupt_images[k].cpu().numpy(), G_z_hat[k].detach().cpu().numpy(), (masks[k]).cpu().numpy() )
             # blended_images = self.posisson_blending( corrupt_images, G_z_hat.detach(), channeled_masks )
@@ -218,16 +222,22 @@ class Inpaint:
 
             plt.subplot(3,1,2)
             plt.axis("off")
+            plt.title("Corrupt Images")
+            plt.imshow(np.transpose(vutils.make_grid(corrupt_images.to(device)[:bsize], padding=5, normalize=True).cpu(),(1,2,0)))
+            plt.savefig("final.png")
+
+            plt.subplot(3,1,3)
+            plt.axis("off")
             plt.title("Generated Images")
             plt.imshow(np.transpose(vutils.make_grid(merged_images.to(device)[:bsize], padding=5, normalize=True).cpu(),(1,2,0)))
             plt.savefig("final.png")
             
-            plt.subplot(3,1,3)
-            plt.axis("off")
-            plt.title("Blended Images")
-            plt.imshow(np.transpose(vutils.make_grid(torch.tensor(blended_images[:bsize]), padding=5, normalize=True),(1,2,0)))
-            plt.savefig("final.png")
-            plt.show()
+            # plt.subplot(3,1,3)
+            # plt.axis("off")
+            # plt.title("Before Merging Images")
+            # plt.imshow(np.transpose(vutils.make_grid(torch.tensor(G_z_hat.to(device)[:bsize]), padding=5, normalize=True).cpu(),(1,2,0)))
+            # plt.savefig("final.png")
+            # plt.show()
                 
             
 
